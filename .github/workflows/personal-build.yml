@@ -2,12 +2,6 @@ name: personal-build
 
 on:
   workflow_dispatch:
-    inputs:
-      git-ref:
-        type: string
-        description: git-ref
-        required: true
-        default: 'master'
 
 jobs:
   win32:
