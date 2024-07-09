@@ -1,4 +1,4 @@
-name: personal-build
+name: local-build
 
 on:
   push:
