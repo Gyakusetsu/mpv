@@ -1,0 +1,103 @@
+name: personal-build
+
+on:
+  workflow_dispatch:
+
+env:
+    release-version: release/0.38.1
+
+jobs:
+  win32:
+    runs-on: windows-latest
+    env:
+      VS: "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
+      CC: "ccache clang"
+      CXX: "ccache clang++"
+      CC_LD: "lld"
+      CXX_LD: "lld"
+      WINDRES: "llvm-rc"
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_DIR: "${{ github.workspace }}\\.ccache"
+      CCACHE_MAXSIZE: 500M
+    steps:
+      - name: Disable autocrlf
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.release-version }}
+
+      - name: Get time
+        id: get_time
+        run: |
+          "timestamp=$((Get-Date).Ticks)" >> $env:GITHUB_OUTPUT
+
+      - name: Restore cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: x86_64-windows-msvc-${{ steps.get_time.outputs.timestamp }}
+          restore-keys: x86_64-windows-msvc-
+
+      # https://github.com/mesonbuild/meson/pull/11715
+      - name: Install dependencies
+        run: |
+          git clone https://github.com/kasper93/meson --depth 1 -b 8981
+          python -m pip install build wheel
+          python -m build --wheel --no-isolation meson
+          python -m pip install (Get-Item ./meson/dist/meson-*-py3-none-any.whl).FullName
+          choco install ccache
+
+      - name: Update Meson WrapDB
+        run: |
+          meson wrap update-db
+          # Explicitly download wraps, as nested projects may have older versions of them.
+          meson wrap install expat
+          meson wrap install harfbuzz
+          meson wrap install libpng
+          meson wrap install zlib
+
+      - name: Build
+        id: build
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
+                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+          ./ci/build-win32.ps1
+
+      - name: Print build log
+        if: ${{ failure() && steps.build.outcome == 'failure' }}
+        run: |
+          cat ./build/meson-logs/meson-log.txt
+
+      - name: Run meson tests
+        id: tests
+        run: |
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' -and `
+                                                             $_ -ne 'C:\Strawberry\c\bin' }) -join ';'
+          Import-Module "$env:VS\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $env:VS -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+          meson test -C build mpv:
+
+      - name: Print meson test log
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        run: |
+          cat ./build/meson-logs/testlog.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpv-x86_64-windows-msvc
+          path: |
+            build/mpv.???
+            build/vulkan-*.dll
+            !build/mpv.lib
+
+      - name: Save Cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: x86_64-windows-msvc-${{ steps.get_time.outputs.timestamp }}
