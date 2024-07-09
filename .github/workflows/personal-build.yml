@@ -1,4 +1,4 @@
-name: build
+name: personal-build
 
 on:
   workflow_dispatch:
@@ -8,29 +8,6 @@ on:
         description: git-ref
         required: true
         default: 'master'
-  push:
-    branches:
-      - master
-      - ci
-      - 'release/**'
-    paths-ignore:
-      - 'DOCS/**'
-      - 'TOOLS/lua/**'
-      - '.editorconfig'
-      - '.gitignore'
-      - 'Copyright'
-      - 'README.md'
-      - 'RELEASE_NOTES'
-  pull_request:
-    branches: [master]
-    paths-ignore:
-      - 'DOCS/**'
-      - 'TOOLS/lua/**'
-      - '.editorconfig'
-      - '.gitignore'
-      - 'Copyright'
-      - 'README.md'
-      - 'RELEASE_NOTES'
 
 jobs:
   win32:
